@@ -31,6 +31,14 @@
           <label>New Project Name</label>
           <input type="text" v-model.trim="newProjectName" placeholder="Project name" required />
         </div>
+        <div v-if="projectMode === 'new'" class="form-row">
+          <label>Project Description</label>
+          <textarea
+            v-model.trim="newProjectDescription"
+            placeholder="Short project description"
+            rows="3"
+          ></textarea>
+        </div>
         <div class="form-row">
           <label>Image File</label>
           <input type="file" accept="image/*" @change="handleFileChange" :required="!form.imageID" />
@@ -56,7 +64,7 @@
           </div>
           <div class="meta">
             <div><strong>ID:</strong> {{ image.imageID }}</div>
-            <div><strong>Project:</strong> {{ image.projectID ?? 'Unassigned' }}</div>
+            <div><strong>Project:</strong> {{ projectLabel(image.projectID) }}</div>
             <div class="actions">
               <button class="btn" @click="editImage(image)">Edit</button>
               <button class="btn danger" @click="deleteImage(image.imageID)">Delete</button>
@@ -81,6 +89,7 @@ export default {
       projectMode: 'existing',
       selectedProjectId: '',
       newProjectName: '',
+      newProjectDescription: '',
       form: {
         imageID: null,
         imageFile: null
@@ -128,7 +137,10 @@ export default {
       const response = await this.authorizedFetch(`${API_BASE}/project`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_name: name })
+        body: JSON.stringify({
+          project_name: name,
+          project_description: this.newProjectDescription.trim() || null
+        })
       });
       const created = await response.json();
       this.projects = [created, ...this.projects];
@@ -206,6 +218,7 @@ export default {
       this.projectMode = 'existing';
       this.selectedProjectId = '';
       this.newProjectName = '';
+      this.newProjectDescription = '';
       this.previewUrl = '';
     },
     handleFileChange(event) {
@@ -215,6 +228,16 @@ export default {
     },
     imageUrl(id) {
       return `${API_BASE}/project-image/${id}/file`;
+    },
+    projectLabel(projectId) {
+      if (!projectId) {
+        return 'Unassigned';
+      }
+      const project = this.projects.find((item) => item.projectID === projectId);
+      if (!project) {
+        return `ID ${projectId}`;
+      }
+      return `${project.project_name} (ID: ${project.projectID})`;
     }
   }
 }
@@ -277,6 +300,15 @@ export default {
   border: 1px solid #d1d5db;
   border-radius: 8px;
   font-size: 14px;
+}
+
+.form-row textarea {
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  resize: vertical;
+  font-family: inherit;
 }
 
 .form-row select {

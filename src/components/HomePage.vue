@@ -4,6 +4,7 @@
     <nav class="navbar">
       <div class="container">
         <div class="logo">
+          <img class="logo-image" src="@/assets/FullLogo.png" alt="2GN" />
           <h1>2GN Construction</h1>
         </div>
         <ul class="nav-links">
@@ -11,9 +12,8 @@
           <li><a href="#about">About</a></li>
           <li><a href="#services">Services</a></li>
           <li><a href="#projects">Projects</a></li>
-          <li><a href="#gallery">Gallery</a></li>
+          <li><a href="#projects">Gallery</a></li>
           <li><a href="#contact">Contact</a></li>
-          <li><a href="#/admin">CMS</a></li>
         </ul>
         <button class="menu-toggle" @click="toggleMenu">☰</button>
       </div>
@@ -98,42 +98,71 @@
     <section id="projects" class="projects">
       <div class="container">
         <div class="section-header">
-          <h2>Featured Projects</h2>
+          <h2>Project Gallery</h2>
           <div class="underline"></div>
-          <p>Showcasing our finest work</p>
+          <p>Name, description, and photos from our database</p>
         </div>
-        <div class="projects-grid">
-          <div class="project-card" v-for="project in projects" :key="project.id">
+        <div v-if="projectsLoading" class="gallery-status">Loading projects...</div>
+        <div v-else-if="projectCards.length === 0" class="gallery-status">No projects yet.</div>
+        <div v-else class="projects-grid">
+          <div class="project-card" v-for="project in projectCards" :key="project.projectID" @click="openProjectGallery(project)">
             <div class="project-image">
-              <div class="project-placeholder">{{ project.icon }}</div>
+              <img v-if="project.imageID" :src="imageUrl(project.imageID)" :alt="project.project_name" />
+              <div v-else class="project-placeholder">🏗️</div>
             </div>
             <div class="project-info">
-              <h3>{{ project.title }}</h3>
-              <p class="project-category">{{ project.category }}</p>
-              <p>{{ project.description }}</p>
+              <h3>{{ project.project_name }}</h3>
+              <p>{{ project.project_description || 'Description coming soon.' }}</p>
             </div>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Gallery Section -->
-    <section id="gallery" class="gallery">
-      <div class="container">
-        <div class="section-header">
-          <h2>Photo Gallery</h2>
-          <div class="underline"></div>
-          <p>Recent photos from our projects</p>
+    <div v-if="isGalleryOpen" class="gallery-modal-overlay" @click.self="closeProjectGallery">
+      <div class="gallery-modal">
+        <button class="gallery-close" @click="closeProjectGallery" aria-label="Close gallery">×</button>
+        <div class="gallery-modal-header">
+          <h3>{{ selectedProject.project_name }}</h3>
+          <p>{{ selectedProject.project_description || 'Description coming soon.' }}</p>
         </div>
-        <div v-if="galleryLoading" class="gallery-status">Loading gallery...</div>
-        <div v-else-if="galleryImages.length === 0" class="gallery-status">No gallery images yet.</div>
-        <div v-else class="gallery-grid">
-          <div class="gallery-card" v-for="image in galleryImages" :key="image.imageID">
-            <img :src="imageUrl(image.imageID)" :alt="image.projectID ? `Project ${image.projectID}` : 'Gallery image'" />
-          </div>
+        <div v-if="selectedProjectImages.length > 0" class="gallery-modal-main">
+          <button
+            v-if="selectedProjectImages.length > 1"
+            class="gallery-nav gallery-prev"
+            @click="prevGalleryImage"
+            aria-label="Previous image"
+          >
+            ‹
+          </button>
+          <img
+            :src="imageUrl(selectedProjectImages[activeGalleryIndex].imageID)"
+            :alt="selectedProject.project_name"
+          />
+          <button
+            v-if="selectedProjectImages.length > 1"
+            class="gallery-nav gallery-next"
+            @click="nextGalleryImage"
+            aria-label="Next image"
+          >
+            ›
+          </button>
+        </div>
+        <div v-else class="gallery-modal-empty">No images available for this project yet.</div>
+        <div v-if="selectedProjectImages.length > 1" class="gallery-thumbnails">
+          <button
+            v-for="(image, index) in selectedProjectImages"
+            :key="image.imageID"
+            class="gallery-thumb"
+            :class="{ active: index === activeGalleryIndex }"
+            @click="setGalleryImage(index)"
+            :aria-label="`View image ${index + 1}`"
+          >
+            <img :src="imageUrl(image.imageID)" :alt="`${selectedProject.project_name} ${index + 1}`" />
+          </button>
         </div>
       </div>
-    </section>
+    </div>
 
     <!-- Contact + Quote Section -->
     <section id="contact" class="contact">
@@ -258,7 +287,10 @@
           </div>
         </div>
         <div class="footer-bottom">
-          <p>&copy; 2026 2GN Construction. All rights reserved.</p>
+          <p>
+            &copy; 2026 2GN Construction. All rights reserved.
+            <a class="footer-cms" href="#/admin">ADMIN</a>
+          </p>
         </div>
       </div>
     </footer>
@@ -273,8 +305,13 @@ export default {
   data() {
     return {
       menuOpen: false,
-      galleryImages: [],
-      galleryLoading: false,
+      projectsFromDb: [],
+      projectImages: [],
+      projectsLoading: false,
+      isGalleryOpen: false,
+      selectedProject: null,
+      activeGalleryIndex: 0,
+      previousBodyOverflow: '',
       services: [
         {
           id: 1,
@@ -313,36 +350,6 @@ export default {
           description: 'Professional architectural design and planning services from concept to completion.'
         }
       ],
-      projects: [
-        {
-          id: 1,
-          icon: '🏠',
-          title: 'Modern Villa Complex',
-          category: 'Residential',
-          description: 'Luxury residential development featuring 20 modern villas with sustainable design.'
-        },
-        {
-          id: 2,
-          icon: '🏬',
-          title: 'Downtown Shopping Center',
-          category: 'Commercial',
-          description: 'State-of-the-art shopping complex spanning 50,000 sq ft in the city center.'
-        },
-        {
-          id: 3,
-          icon: '🏗️',
-          title: 'Corporate Headquarters',
-          category: 'Commercial',
-          description: '15-story office building with modern amenities and green building certification.'
-        },
-        {
-          id: 4,
-          icon: '🏘️',
-          title: 'Riverside Apartments',
-          category: 'Residential',
-          description: 'Contemporary apartment complex with 100 units and premium facilities.'
-        }
-      ],
       form: {
         name: '',
         email: '',
@@ -358,26 +365,94 @@ export default {
     }
   },
   mounted() {
-    this.fetchGallery();
+    this.fetchProjectCards();
+    document.addEventListener('keydown', this.handleGalleryKeydown);
+  },
+  beforeUnmount() {
+    this.unlockBodyScroll();
+    document.removeEventListener('keydown', this.handleGalleryKeydown);
+  },
+  computed: {
+    projectCards() {
+      return this.projectsFromDb.map((project) => {
+        const image = this.projectImages.find((item) => item.projectID === project.projectID);
+        return {
+          ...project,
+          imageID: image ? image.imageID : null
+        };
+      });
+    },
+    selectedProjectImages() {
+      if (!this.selectedProject) return [];
+      return this.projectImages.filter((image) => image.projectID === this.selectedProject.projectID);
+    }
   },
   methods: {
     toggleMenu() {
       this.menuOpen = !this.menuOpen;
     },
-    async fetchGallery() {
-      this.galleryLoading = true;
+    async fetchProjectCards() {
+      this.projectsLoading = true;
       try {
-        const response = await fetch(`${API_BASE}/project-image`);
-        this.galleryImages = await response.json();
+        const [projectResponse, imageResponse] = await Promise.all([
+          fetch(`${API_BASE}/project`),
+          fetch(`${API_BASE}/project-image`)
+        ]);
+        this.projectsFromDb = await projectResponse.json();
+        this.projectImages = await imageResponse.json();
       } catch (error) {
-        console.error('Failed to load gallery', error);
-        this.galleryImages = [];
+        console.error('Failed to load projects', error);
+        this.projectsFromDb = [];
+        this.projectImages = [];
       } finally {
-        this.galleryLoading = false;
+        this.projectsLoading = false;
       }
     },
     imageUrl(id) {
       return `${API_BASE}/project-image/${id}/file`;
+    },
+    openProjectGallery(project) {
+      this.selectedProject = project;
+      this.activeGalleryIndex = 0;
+      this.isGalleryOpen = true;
+      this.lockBodyScroll();
+    },
+    closeProjectGallery() {
+      this.isGalleryOpen = false;
+      this.selectedProject = null;
+      this.activeGalleryIndex = 0;
+      this.unlockBodyScroll();
+    },
+    lockBodyScroll() {
+      this.previousBodyOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+    },
+    unlockBodyScroll() {
+      document.body.style.overflow = this.previousBodyOverflow;
+    },
+    prevGalleryImage() {
+      if (this.selectedProjectImages.length < 2) return;
+      const nextIndex = this.activeGalleryIndex - 1;
+      this.activeGalleryIndex = nextIndex < 0 ? this.selectedProjectImages.length - 1 : nextIndex;
+    },
+    nextGalleryImage() {
+      if (this.selectedProjectImages.length < 2) return;
+      this.activeGalleryIndex = (this.activeGalleryIndex + 1) % this.selectedProjectImages.length;
+    },
+    setGalleryImage(index) {
+      this.activeGalleryIndex = index;
+    },
+    handleGalleryKeydown(event) {
+      if (!this.isGalleryOpen) return;
+      if (event.key === 'Escape') {
+        this.closeProjectGallery();
+      }
+      if (event.key === 'ArrowLeft') {
+        this.prevGalleryImage();
+      }
+      if (event.key === 'ArrowRight') {
+        this.nextGalleryImage();
+      }
     },
     async handleSubmit() {
       this.submitting = true;
@@ -396,7 +471,8 @@ export default {
           return;
         }
 
-        this.submitMessage = 'Thanks for your request! We will contact you with a quote soon.';
+        const payload = await response.json().catch(() => null);
+        this.submitMessage = payload?.message || 'Thanks for your request! We will contact you shortly.';
         this.form = {
           name: '',
           email: '',
@@ -455,6 +531,18 @@ export default {
 .logo h1 {
   font-size: 1.8rem;
   color: #ff6b35;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.logo-image {
+  height: 44px;
+  width: auto;
+  display: block;
 }
 
 .nav-links {
@@ -708,6 +796,7 @@ export default {
   overflow: hidden;
   box-shadow: 0 5px 15px rgba(0,0,0,0.1);
   transition: transform 0.3s;
+  cursor: pointer;
 }
 
 .project-card:hover {
@@ -731,6 +820,12 @@ export default {
   font-size: 4rem;
 }
 
+.project-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .project-info {
   padding: 1.5rem;
 }
@@ -750,6 +845,126 @@ export default {
 .project-info p {
   color: #666;
   line-height: 1.6;
+}
+
+.gallery-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 1000;
+}
+
+.gallery-modal {
+  width: 100%;
+  max-width: 900px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 12px;
+  padding: 1.5rem;
+  position: relative;
+}
+
+.gallery-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.75rem;
+  border: none;
+  background: transparent;
+  font-size: 2rem;
+  line-height: 1;
+  cursor: pointer;
+  color: #374151;
+}
+
+.gallery-modal-header {
+  margin-bottom: 1rem;
+  padding-right: 2rem;
+}
+
+.gallery-modal-header h3 {
+  font-size: 1.5rem;
+  color: #1a1a1a;
+  margin-bottom: 0.5rem;
+}
+
+.gallery-modal-header p {
+  color: #6b7280;
+}
+
+.gallery-modal-main {
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #f3f4f6;
+}
+
+.gallery-modal-main img {
+  width: 100%;
+  max-height: 60vh;
+  object-fit: cover;
+  display: block;
+}
+
+.gallery-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+
+.gallery-prev {
+  left: 0.75rem;
+}
+
+.gallery-next {
+  right: 0.75rem;
+}
+
+.gallery-thumbnails {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.gallery-thumb {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  padding: 0;
+  overflow: hidden;
+  cursor: pointer;
+  background: #fff;
+}
+
+.gallery-thumb img {
+  width: 100%;
+  height: 70px;
+  object-fit: cover;
+  display: block;
+}
+
+.gallery-thumb.active {
+  border-color: #ff6b35;
+}
+
+.gallery-modal-empty {
+  text-align: center;
+  color: #6b7280;
+  padding: 2rem 1rem;
+  background: #f9fafb;
+  border-radius: 10px;
 }
 
 /* Gallery Section */
@@ -934,6 +1149,19 @@ export default {
   color: #999;
 }
 
+.footer-cms {
+  margin-left: 12px;
+  font-size: 0.85rem;
+  color: #999;
+  opacity: 0.6;
+  text-decoration: none;
+}
+
+.footer-cms:hover {
+  opacity: 1;
+  color: #ccc;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .nav-links {
@@ -974,6 +1202,14 @@ export default {
   
   .section-header h2 {
     font-size: 2rem;
+  }
+
+  .gallery-modal {
+    padding: 1rem;
+  }
+
+  .gallery-modal-main img {
+    max-height: 45vh;
   }
 }
 
