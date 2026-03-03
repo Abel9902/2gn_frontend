@@ -42,9 +42,9 @@
         </div>
         <div class="about-content">
           <div class="about-text">
-            <h3>15+ Years of Excellence in Construction</h3>
+            <h3>40+ Years of Excellence in Construction</h3>
             <p>
-              2GN Construction is a leading construction company specializing in residential, 
+              2GN Construction is a construction company specializing in residential, 
               commercial. With over 40 years of experience, we have 
               built a reputation for delivering high-quality projects on time and within budget.
             </p>
@@ -52,20 +52,6 @@
               Our team of experienced professionals is dedicated to bringing your vision to life 
               with precision, innovation, and commitment to excellence.
             </p>
-            <div class="stats">
-              <div class="stat-item">
-                <h4>500+</h4>
-                <p>Projects Completed</p>
-              </div>
-              <div class="stat-item">
-                <h4>98%</h4>
-                <p>Client Satisfaction</p>
-              </div>
-              <div class="stat-item">
-                <h4>50+</h4>
-                <p>Expert Team Members</p>
-              </div>
-            </div>
           </div>
           <div class="about-image">
             <div class="image-placeholder">
@@ -98,9 +84,8 @@
     <section id="projects" class="projects">
       <div class="container">
         <div class="section-header">
-          <h2>Project Gallery</h2>
+          <h2>Projects</h2>
           <div class="underline"></div>
-          <p>Name, description, and photos from our database</p>
         </div>
         <div v-if="projectsLoading" class="gallery-status">Loading projects...</div>
         <div v-else-if="projectCards.length === 0" class="gallery-status">No projects yet.</div>
@@ -199,7 +184,7 @@
               <div class="info-icon">🕐</div>
               <div>
                 <h4>Working Hours</h4>
-                <p>Mon - Fri: 8:00 AM - 6:00 PM</p>
+                <p>Mon - Fri: 7:00 AM - 5:00 PM</p>
                 <p>Sat: by appointment only</p>
                 <p>Sun: Closed</p>
               </div>
@@ -226,19 +211,20 @@
                 </select>
               </div>
               <div class="form-group">
-                <select v-model="form.budget" required>
-                  <option disabled value="">Estimated Budget</option>
-                  <option>Under $25k</option>
-                  <option>$25k - $75k</option>
-                  <option>$75k - $150k</option>
-                  <option>$150k+</option>
-                </select>
-              </div>
-              <div class="form-group">
                 <input type="text" placeholder="Preferred Timeline (e.g., Q2 2026)" v-model="form.timeline">
               </div>
               <div class="form-group">
                 <textarea placeholder="Project Details" v-model="form.message" rows="5" required></textarea>
+              </div>
+              <div class="form-group">
+                <input
+                  ref="quoteAttachmentInput"
+                  type="file"
+                  @change="handleAttachmentChange"
+                  multiple
+                  accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                >
+                <small class="attachment-help">Optional. Max 5 files, up to 5MB each. Accepted: PDF, PNG, JPG, DOC, DOCX.</small>
               </div>
               <button type="submit" class="btn btn-primary" :disabled="submitting">
                 {{ submitting ? 'Sending...' : 'Request Quote' }}
@@ -299,6 +285,15 @@
 
 <script>
 const API_BASE = process.env.VUE_APP_API_BASE || 'http://localhost:3000';
+const MAX_ATTACHMENT_SIZE_BYTES = 5 * 1024 * 1024;
+const MAX_ATTACHMENT_COUNT = 5;
+const ALLOWED_ATTACHMENT_MIME_TYPES = [
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+];
 
 export default {
   name: 'HomePage',
@@ -326,12 +321,6 @@ export default {
           description: 'Modern commercial structures designed for functionality, aesthetics, and long-term value.'
         },
         {
-          id: 3,
-          icon: '🏭',
-          title: 'Industrial Projects',
-          description: 'Large-scale industrial construction projects with focus on efficiency and safety standards.'
-        },
-        {
           id: 4,
           icon: '🔨',
           title: 'Renovation & Remodeling',
@@ -355,9 +344,9 @@ export default {
         email: '',
         phone: '',
         projectType: '',
-        budget: '',
         timeline: '',
-        message: ''
+        message: '',
+        attachments: []
       },
       submitting: false,
       submitMessage: '',
@@ -459,10 +448,22 @@ export default {
       this.submitMessage = '';
       this.submitError = '';
       try {
+        const formData = new FormData();
+        formData.append('name', this.form.name);
+        formData.append('email', this.form.email);
+        formData.append('phone', this.form.phone || '');
+        formData.append('projectType', this.form.projectType);
+        formData.append('timeline', this.form.timeline || '');
+        formData.append('message', this.form.message);
+        if (this.form.attachments.length > 0) {
+          this.form.attachments.forEach((attachment) => {
+            formData.append('attachments', attachment);
+          });
+        }
+
         const response = await fetch(`${API_BASE}/quote`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(this.form)
+          body: formData
         });
 
         if (!response.ok) {
@@ -478,16 +479,62 @@ export default {
           email: '',
           phone: '',
           projectType: '',
-          budget: '',
           timeline: '',
-          message: ''
+          message: '',
+          attachments: []
         };
+        if (this.$refs.quoteAttachmentInput) {
+          this.$refs.quoteAttachmentInput.value = '';
+        }
       } catch (error) {
         console.error('Quote request failed', error);
         this.submitError = 'Failed to send request.';
       } finally {
         this.submitting = false;
       }
+    },
+    handleAttachmentChange(event) {
+      const files = Array.from(event?.target?.files || []);
+      if (files.length === 0) {
+        this.form.attachments = [];
+        return;
+      }
+
+      if (files.length > MAX_ATTACHMENT_COUNT) {
+        this.submitError = `Too many files. Max ${MAX_ATTACHMENT_COUNT} attachments allowed.`;
+        this.form.attachments = [];
+        if (this.$refs.quoteAttachmentInput) {
+          this.$refs.quoteAttachmentInput.value = '';
+        }
+        return;
+      }
+
+      const hasInvalidType = files.some(
+        (file) => !ALLOWED_ATTACHMENT_MIME_TYPES.includes(file.type)
+      );
+      if (hasInvalidType) {
+        this.submitError = 'Invalid file type. Allowed: PDF, PNG, JPG, DOC, DOCX.';
+        this.form.attachments = [];
+        if (this.$refs.quoteAttachmentInput) {
+          this.$refs.quoteAttachmentInput.value = '';
+        }
+        return;
+      }
+
+      const hasLargeFile = files.some(
+        (file) => file.size > MAX_ATTACHMENT_SIZE_BYTES
+      );
+      if (hasLargeFile) {
+        this.submitError = 'Attachment too large. Max size is 5MB per file.';
+        this.form.attachments = [];
+        if (this.$refs.quoteAttachmentInput) {
+          this.$refs.quoteAttachmentInput.value = '';
+        }
+        return;
+      }
+
+      this.submitError = '';
+      this.form.attachments = files;
     }
   }
 }
@@ -744,7 +791,8 @@ export default {
 
 .services-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 320px));
+  justify-content: center;
   gap: 2rem;
 }
 
@@ -1068,6 +1116,13 @@ export default {
 
 .form-group textarea {
   resize: vertical;
+}
+
+.attachment-help {
+  display: block;
+  margin-top: 0.35rem;
+  color: #666;
+  font-size: 0.875rem;
 }
 
 .form-success {

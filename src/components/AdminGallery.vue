@@ -58,7 +58,17 @@
       <div v-if="loading" class="status">Loading...</div>
       <div v-else-if="images.length === 0" class="status">No images yet.</div>
       <div v-else class="grid">
-        <div class="card" v-for="image in images" :key="image.imageID">
+        <div
+          class="card"
+          :class="{ draggable: !reordering, 'drag-over': dragOverIndex === index }"
+          v-for="(image, index) in images"
+          :key="image.imageID"
+          :draggable="!reordering"
+          @dragstart="onDragStart(index, $event)"
+          @dragover.prevent="onDragOver(index)"
+          @drop.prevent="onDrop(index)"
+          @dragend="onDragEnd"
+        >
           <div class="thumb">
             <img :src="imageUrl(image.imageID)" :alt="`Project ${image.projectID}`" />
           </div>
@@ -66,6 +76,8 @@
             <div><strong>ID:</strong> {{ image.imageID }}</div>
             <div><strong>Project:</strong> {{ projectLabel(image.projectID) }}</div>
             <div class="actions">
+              <button class="btn" :disabled="reordering || isFirst(index)" @click="moveImage(index, -1)">Up</button>
+              <button class="btn" :disabled="reordering || isLast(index)" @click="moveImage(index, 1)">Down</button>
               <button class="btn" @click="editImage(image)">Edit</button>
               <button class="btn danger" @click="deleteImage(image.imageID)">Delete</button>
             </div>
@@ -94,7 +106,10 @@ export default {
         imageID: null,
         imageFile: null
       },
-      previewUrl: ''
+      previewUrl: '',
+      reordering: false,
+      draggedIndex: null,
+      dragOverIndex: null
     }
   },
   mounted() {
@@ -212,6 +227,92 @@ export default {
         console.error('Delete failed', error);
         alert('Delete failed.');
       }
+    },
+    isFirst(index) {
+      return index === 0;
+    },
+    isLast(index) {
+      return index === this.images.length - 1;
+    },
+    async moveImage(index, direction) {
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= this.images.length || this.reordering) {
+        return;
+      }
+
+      this.reorderLocal(index, targetIndex);
+
+      try {
+        this.reordering = true;
+        await this.persistOrder();
+      } catch (error) {
+        console.error('Reorder failed', error);
+        alert('Reorder failed.');
+        await this.fetchImages();
+      } finally {
+        this.reordering = false;
+      }
+    },
+    async persistOrder() {
+      await this.authorizedFetch(`${API_BASE}/project-image/reorder`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageIds: this.images.map((image) => image.imageID) })
+      });
+    },
+    reorderLocal(fromIndex, toIndex) {
+      const updated = [...this.images];
+      const [moved] = updated.splice(fromIndex, 1);
+      updated.splice(toIndex, 0, moved);
+      this.images = updated;
+    },
+    onDragStart(index, event) {
+      if (this.reordering) {
+        return;
+      }
+      this.draggedIndex = index;
+      this.dragOverIndex = index;
+      if (event?.dataTransfer) {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', String(index));
+      }
+    },
+    onDragOver(index) {
+      if (this.draggedIndex === null || this.reordering) {
+        return;
+      }
+      this.dragOverIndex = index;
+    },
+    async onDrop(index) {
+      if (this.draggedIndex === null || this.reordering) {
+        this.onDragEnd();
+        return;
+      }
+
+      const fromIndex = this.draggedIndex;
+      const toIndex = index;
+      this.onDragEnd();
+
+      if (fromIndex === toIndex) {
+        return;
+      }
+
+      this.reorderLocal(fromIndex, toIndex);
+
+      try {
+        this.reordering = true;
+        await this.persistOrder();
+      } catch (error) {
+        console.error('Reorder failed', error);
+        alert('Reorder failed.');
+        await this.fetchImages();
+      } finally {
+        this.reordering = false;
+      }
+    },
+    onDragEnd() {
+      this.draggedIndex = null;
+      this.dragOverIndex = null;
     },
     resetForm() {
       this.form = { imageID: null, imageFile: null };
@@ -375,6 +476,15 @@ export default {
   border-radius: 12px;
   overflow: hidden;
   background: #fff;
+}
+
+.card.draggable {
+  cursor: grab;
+}
+
+.card.drag-over {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
 }
 
 .thumb {
