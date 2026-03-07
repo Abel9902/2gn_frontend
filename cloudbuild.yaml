@@ -36,4 +36,4 @@ substitutions:
   _SERVICE_NAME: 2gn-frontend
   _REGION: us-central1
   _IMAGE_NAME: 2gn-frontend
-  _VUE_APP_API_BASE: https://api.2gnconstruction.com
+  _VUE_APP_API_BASE: https://website-2gn-984064352320.us-central1.run.app
